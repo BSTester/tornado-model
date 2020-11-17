@@ -1,12 +1,9 @@
 from sqlalchemy.ext.declarative import DeclarativeMeta
 from tornado.web import RequestHandler
 from tornado.log import app_log
-from tornado_model.sqlalchemy import SessionMixin
+from tornado_model.sqlalchemy import SessionMixin, SQLAlchemy, as_future
 from tornado_model.redis import RedisMixin
 from xml.etree import cElementTree as ET
-from sqlalchemy.orm.state import InstanceState
-from decimal import Decimal
-from datetime import datetime
 from munch import munchify
 import functools
 import json
@@ -80,27 +77,65 @@ class BaseRequestHandler(RedisMixin, SessionMixin, RequestHandler):
         pass
 
 
+class BaseModel(SessionMixin):
+    def __init__(self, db:SQLAlchemy=None, table:DeclarativeMeta=None):
+        self.config = dict(db=db)
+        self.table = table
+        super(BaseModel, self).__init__()
 
-class BaseModel(DeclarativeMeta):
-    __table_args__ = {
-        'mysql_engine':'InnoDB',
-        'mysql_charset':'utf8mb4',
-        'mysql_row_format':'dynamic'
-        }
+    async def add_data(self, data:dict):
+        try:
+            td = self.table(**data)
+            with self.db_session() as db:
+                await as_future(db.add(td))
+                await db.flush()
+                td = td.to_object()
+        except Exception as e:
+            app_log.error(e)
+            td = None
+        finally:
+            return td
 
-    def to_dict(self):
-        rows = dict()
-        for k, v in self.__dict__.items():
-            if isinstance(v, InstanceState):
-                continue
-            elif isinstance(v, datetime):
-                v = v.strftime('%Y-%m-%d %H:%M:%S')
-            elif isinstance(v, Decimal):
-                v = str(v.quantize(Decimal('0.00')))
-            elif isinstance(v, DeclarativeMeta):
-                v = v.to_dict()
-            rows[k] = v
-        return rows
+    async def query_data(self, filter:[], page=1, page_size=10):
+        try:
+            with self.db_session() as db:
+                td = await as_future(db.query(self.table).filter(*filter).order_by(self.table.id.desc()).paginate(page, page_size))
+                td.items = [d.to_object() for d in td.items]
+        except Exception as e:
+            app_log.error(e)
+            td = None
+        finally:
+            return td
 
-    def to_json(self):
-        return json.dumps(self.to_dict(), ensure_ascii=False)
+    async def query_one_data(self, filter:[]):
+        try:
+            with self.db_session() as db:
+                td = await as_future(db.query(self.table).filter(*filter).first())
+                td = td and td.to_object()
+        except Exception as e:
+            app_log.error(e)
+            td = None
+        finally:
+            return td
+
+    async def update_data(self, filter:[], data:dict):
+        try:
+            with self.db_session() as db:
+                td = await as_future(db.query(self.table).filter(*filter).with_for_update().update(data, synchronize_session='fetch'))
+                await db.flush()
+        except Exception as e:
+            app_log.error(e)
+            td = False
+        finally:
+            return td
+
+    async def delete_data(self, filter=[]):
+        try:
+            with self.db_session() as db:
+              td = await as_future(db.query(self.table).filter(*filter).delete(synchronize_session='fetch'))
+              await db.flush()
+        except Exception as e:
+            app_log.error(e)
+            td = False
+        finally:
+            return td

@@ -1,4 +1,5 @@
 import multiprocessing
+import json
 from concurrent.futures import Executor, ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Callable, Iterator, Optional
@@ -10,6 +11,10 @@ from sqlalchemy.orm.session import Session
 from tornado.concurrent import Future, chain_future
 from tornado.ioloop import IOLoop
 from tornado.web import Application
+from sqlalchemy.orm.state import InstanceState
+from decimal import Decimal
+from datetime import datetime
+from munch import munchify
 
 __all__ = ('as_future', 'SessionMixin', 'set_max_workers', 'SQLAlchemy')
 
@@ -181,6 +186,26 @@ class BindMeta(DeclarativeMeta):
             and getattr(cls, '__table__', None) is not None
         ):
             cls.__table__.info['bind_key'] = bind_key
+
+    def to_dict(self):
+        rows = dict()
+        for k, v in self.__dict__.items():
+            if isinstance(v, InstanceState):
+                continue
+            elif isinstance(v, datetime):
+                v = v.strftime('%Y-%m-%d %H:%M:%S')
+            elif isinstance(v, Decimal):
+                v = str(v.quantize(Decimal('0.00')))
+            elif isinstance(v, DeclarativeMeta):
+                v = v.to_dict()
+            rows[k] = v
+        return rows
+
+    def to_json(self):
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
+    def to_object(self):
+        return munchify(self.to_dict())
 
 
 class SQLAlchemy:
