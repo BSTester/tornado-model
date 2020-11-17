@@ -1,10 +1,10 @@
-# tornado-model
+# tornado-models
 
 sqlalchemy and redis for tornado
 
 ## Installation
 
-    pip install tornado-model
+    pip install tornado-models
 
 ## Usage
 

@@ -25,9 +25,9 @@ here = pathlib.Path(__file__).parent.resolve()
 long_description = (here / 'README.md').read_text(encoding='utf-8')
 
 setup(
-    name='tornado_model',
+    name='tornado_models',
     version='0.0.1',
-    url='https://github.com/BSTester/tornado-model',
+    url='https://github.com/BSTester/tornado-models',
     author='贝克街的捉虫师',
     author_email='forpeng@foxmail.com',
     description='sqlalchemy and redis for tornado',

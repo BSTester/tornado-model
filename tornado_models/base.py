@@ -1,8 +1,8 @@
 from sqlalchemy.ext.declarative import DeclarativeMeta
 from tornado.web import RequestHandler
 from tornado.log import app_log
-from tornado_model.sqlalchemy import SessionMixin, SQLAlchemy, as_future
-from tornado_model.redis import RedisMixin
+from tornado_models.sqlalchemy import SessionMixin, SQLAlchemy, as_future
+from tornado_models.redis import RedisMixin
 from xml.etree import cElementTree as ET
 from munch import munchify
 import functools
