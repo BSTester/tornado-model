@@ -96,7 +96,7 @@ class BaseModel(SessionMixin):
         finally:
             return td
 
-    async def query_data(self, filter:[], page=1, page_size=10):
+    async def query_data(self, filter:list, page=1, page_size=10):
         try:
             with self.db_session() as db:
                 td = await as_future(db.query(self.table).filter(*filter).order_by(self.table.id.desc()).paginate(page, page_size))
@@ -107,7 +107,7 @@ class BaseModel(SessionMixin):
         finally:
             return td
 
-    async def query_one_data(self, filter:[]):
+    async def query_one_data(self, filter:list):
         try:
             with self.db_session() as db:
                 td = await as_future(db.query(self.table).filter(*filter).first())
@@ -118,7 +118,7 @@ class BaseModel(SessionMixin):
         finally:
             return td
 
-    async def update_data(self, filter:[], data:dict):
+    async def update_data(self, filter:list, data:dict):
         try:
             with self.db_session() as db:
                 td = await as_future(db.query(self.table).filter(*filter).with_for_update().update(data, synchronize_session='fetch'))
@@ -129,7 +129,7 @@ class BaseModel(SessionMixin):
         finally:
             return td
 
-    async def delete_data(self, filter=[]):
+    async def delete_data(self, filter:list):
         try:
             with self.db_session() as db:
               td = await as_future(db.query(self.table).filter(*filter).delete(synchronize_session='fetch'))
