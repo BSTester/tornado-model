@@ -1,8 +1,9 @@
 from sqlalchemy.ext.declarative import DeclarativeMeta
 from tornado.web import RequestHandler
 from tornado.log import app_log
-from tornado_models.sqlalchemy import SessionMixin, SQLAlchemy, as_future
+from tornado_models.sqlalchemy import SessionMixin, SQLAlchemy
 from tornado_models.redis import RedisMixin
+from tornado_models import as_future
 from xml.etree import cElementTree as ET
 from munch import munchify
 import functools
@@ -78,16 +79,15 @@ class BaseRequestHandler(RedisMixin, SessionMixin, RequestHandler):
 
 
 class BaseModel(SessionMixin):
-    def __init__(self, db:SQLAlchemy=None, table:DeclarativeMeta=None):
+    def __init__(self, db:SQLAlchemy=None):
         self.config = dict(db=db)
-        self.table = table
         super(BaseModel, self).__init__()
 
-    async def add_data(self, data:dict):
+    async def add_data(self, table:DeclarativeMeta, data:dict):
         try:
-            td = self.table(**data)
+            td = table(**data)
             with self.db_session() as db:
-                await as_future(db.add(td))
+                await as_future(db.add, (td))
                 await db.flush()
                 td = td.to_object()
         except Exception as e:
@@ -96,10 +96,10 @@ class BaseModel(SessionMixin):
         finally:
             return td
 
-    async def query_data(self, filter:list, page=1, page_size=10):
+    async def query_data(self, table:DeclarativeMeta, filter:list, page=1, page_size=10):
         try:
             with self.db_session() as db:
-                td = await as_future(db.query(self.table).filter(*filter).order_by(self.table.id.desc()).paginate(page, page_size))
+                td = await as_future(db.query(table).filter(*filter).order_by(table.id.desc()).paginate, (page, page_size))
                 td.items = [d.to_object() for d in td.items]
         except Exception as e:
             app_log.error(e)
@@ -107,10 +107,10 @@ class BaseModel(SessionMixin):
         finally:
             return td
 
-    async def query_one_data(self, filter:list):
+    async def query_one_data(self, table:DeclarativeMeta, filter:list):
         try:
             with self.db_session() as db:
-                td = await as_future(db.query(self.table).filter(*filter).first())
+                td = await as_future(db.query(table).filter(*filter).first)
                 td = td and td.to_object()
         except Exception as e:
             app_log.error(e)
@@ -118,10 +118,10 @@ class BaseModel(SessionMixin):
         finally:
             return td
 
-    async def update_data(self, filter:list, data:dict):
+    async def update_data(self, table:DeclarativeMeta, filter:list, data:dict):
         try:
             with self.db_session() as db:
-                td = await as_future(db.query(self.table).filter(*filter).with_for_update().update(data, synchronize_session='fetch'))
+                td = await as_future(db.query(table).filter(*filter).with_for_update().update, (data, 'fetch'))
                 await db.flush()
         except Exception as e:
             app_log.error(e)
@@ -129,10 +129,10 @@ class BaseModel(SessionMixin):
         finally:
             return td
 
-    async def delete_data(self, filter:list):
+    async def delete_data(self, table:DeclarativeMeta, filter:list):
         try:
             with self.db_session() as db:
-              td = await as_future(db.query(self.table).filter(*filter).delete(synchronize_session='fetch'))
+              td = await as_future(db.query(table).filter(*filter).delete, ('fetch'))
               await db.flush()
         except Exception as e:
             app_log.error(e)

@@ -1,72 +1,17 @@
-import multiprocessing
 import json
-from concurrent.futures import Executor, ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Callable, Iterator, Optional
+from typing import Iterator, Optional
+from tornado_models import MissingDatabaseSettingError, MissingFactoryError
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.orm.session import Session
-from tornado.concurrent import Future, chain_future
-from tornado.ioloop import IOLoop
 from tornado.web import Application
 from sqlalchemy.orm.state import InstanceState
 from decimal import Decimal
 from datetime import datetime
 from munch import munchify
-
-__all__ = ('as_future', 'SessionMixin', 'set_max_workers', 'SQLAlchemy')
-
-
-class MissingFactoryError(Exception):
-    pass
-
-
-class MissingDatabaseSettingError(Exception):
-    pass
-
-
-class _AsyncExecution:
-    """Tiny wrapper around ThreadPoolExecutor. This class is not meant to be
-    instantiated externally, but internally we just use it as a wrapper around
-    ThreadPoolExecutor so we can control the pool size and make the
-    `as_future` function public.
-    """
-
-    def __init__(self, max_workers: Optional[int] = None):
-        self._max_workers = (
-            max_workers or multiprocessing.cpu_count()
-        )  # type: int
-        self._pool = None  # type: Optional[Executor]
-
-    def set_max_workers(self, count: int):
-        if self._pool:
-            self._pool.shutdown(wait=True)
-
-        self._max_workers = count
-        self._pool = ThreadPoolExecutor(max_workers=self._max_workers)
-
-    def as_future(self, query: Callable) -> Future:
-        # concurrent.futures.Future is not compatible with the "new style"
-        # asyncio Future, and awaiting on such "old-style" futures does not
-        # work.
-        #
-        # tornado includes a `run_in_executor` function to help with this
-        # problem, but it's only included in version 5+. Hence, we copy a
-        # little bit of code here to handle this incompatibility.
-
-        if not self._pool:
-            self._pool = ThreadPoolExecutor(max_workers=self._max_workers)
-
-        old_future = self._pool.submit(query)
-        new_future = Future()  # type: Future
-
-        IOLoop.current().add_future(
-            old_future, lambda f: chain_future(f, new_future)
-        )
-
-        return new_future
 
 
 class SessionMixin:
@@ -108,7 +53,7 @@ class SessionMixin:
             next_on_finish()
 
     @property
-    def db_session(self) -> Session:
+    def db_conn(self) -> Session:
         if not self._session:
             self._session = self._make_session()
         return self._session
@@ -125,13 +70,6 @@ class SessionMixin:
         if not db:
             raise MissingDatabaseSettingError()
         return db.sessionmaker()
-
-
-_async_exec = _AsyncExecution()
-
-as_future = _async_exec.as_future
-
-set_max_workers = _async_exec.set_max_workers
 
 
 class SessionEx(Session):
@@ -187,25 +125,26 @@ class BindMeta(DeclarativeMeta):
         ):
             cls.__table__.info['bind_key'] = bind_key
 
-    def to_dict(self):
-        rows = dict()
-        for k, v in self.__dict__.items():
-            if isinstance(v, InstanceState):
-                continue
-            elif isinstance(v, datetime):
-                v = v.strftime('%Y-%m-%d %H:%M:%S')
-            elif isinstance(v, Decimal):
-                v = str(v.quantize(Decimal('0.00')))
-            elif isinstance(v, DeclarativeMeta):
-                v = v.to_dict()
-            rows[k] = v
-        return rows
 
-    def to_json(self):
-        return json.dumps(self.to_dict(), ensure_ascii=False)
+def to_dict(self):
+    rows = dict()
+    for k, v in self.__dict__.items():
+        if isinstance(v, InstanceState):
+            continue
+        elif isinstance(v, datetime):
+            v = v.strftime('%Y-%m-%d %H:%M:%S')
+        elif isinstance(v, Decimal):
+            v = str(v.quantize(Decimal('0.00')))
+        elif isinstance(v, DeclarativeMeta):
+            v = v.to_dict()
+        rows[k] = v
+    return rows
 
-    def to_object(self):
-        return munchify(self.to_dict())
+def to_json(self):
+    return json.dumps(self.to_dict(), ensure_ascii=False)
+
+def to_object(self):
+    return munchify(self.to_dict())
 
 
 class SQLAlchemy:
@@ -213,6 +152,9 @@ class SQLAlchemy:
         self, url=None, binds=None, session_options=None, engine_options=None
     ):
         self.Model = self.make_declarative_base()
+        self.Model.to_dict = to_dict
+        self.Model.to_json = to_json
+        self.Model.to_object = to_object
         self._engines = {}
 
         self.configure(
