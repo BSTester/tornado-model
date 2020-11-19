@@ -26,7 +26,7 @@ class _AsyncExecution:
         self._max_workers = (
             max_workers or multiprocessing.cpu_count()
         )  # type: int
-        self._pool = None  # type: Optional[Executor]
+        self._pool = ThreadPoolExecutor(max_workers=self._max_workers)  # type: Optional[Executor]
 
     def set_max_workers(self, count: int):
         if self._pool:
@@ -35,6 +35,7 @@ class _AsyncExecution:
         self._max_workers = count
         self._pool = ThreadPoolExecutor(max_workers=self._max_workers)
 
+    @run_on_executor(executor='_pool')
     def as_future(self, query: Callable, *args: Any, **kwargs: Any) -> Future:
         # concurrent.futures.Future is not compatible with the "new style"
         # asyncio Future, and awaiting on such "old-style" futures does not
@@ -47,14 +48,14 @@ class _AsyncExecution:
         if not self._pool:
             self._pool = ThreadPoolExecutor(max_workers=self._max_workers)
 
-        old_future = self._pool.submit(query, *args, **kwargs)
-        new_future = Future()  # type: Future
+        # old_future = self._pool.submit(query, *args, **kwargs)
+        # new_future = Future()  # type: Future
         
-        IOLoop.current().add_future(
-            old_future, lambda f: chain_future(f, new_future)
-        )
+        # IOLoop.current().add_future(
+        #     old_future, lambda f: chain_future(f, new_future)
+        # )
 
-        return new_future
+        return query
 
 
 _async_exec = _AsyncExecution()
@@ -72,7 +73,6 @@ class Pagination(object):
     as query object in which case the :meth:`prev` and :meth:`next` will
     no longer work.
     """
-    executor = ThreadPoolExecutor(max_workers)
 
     def __init__(self, query, page, per_page, total, items):
         #: the unlimited query object that was used to create this
@@ -96,7 +96,6 @@ class Pagination(object):
             pages = int(ceil(self.total / float(self.per_page)))
         return pages
 
-    @run_on_executor
     def prev(self):
         """Returns a :class:`Pagination` object for the previous page."""
         assert self.query is not None, 'a query object is required ' \
@@ -115,7 +114,6 @@ class Pagination(object):
         """True if a previous page exists"""
         return self.page > 1
 
-    @run_on_executor
     def next(self):
         """Returns a :class:`Pagination` object for the next page."""
         assert self.query is not None, 'a query object is required ' \
@@ -168,7 +166,6 @@ class Pagination(object):
                 yield num
                 last = num
 
-@run_on_executor
 def paginate(self, page=None, per_page=None, max_per_page=None, count=True):
         """Returns ``per_page`` items from page ``page``.
         If ``page`` or ``per_page`` are ``None``, they will be retrieved from
@@ -209,7 +206,6 @@ def paginate(self, page=None, per_page=None, max_per_page=None, count=True):
         return Pagination(self, page, per_page, total, items)
 
 
-setattr(Query, 'executor', ThreadPoolExecutor(max_workers))
 Query.paginate = paginate
 
 

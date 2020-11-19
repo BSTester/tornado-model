@@ -87,8 +87,8 @@ class BaseModel(SessionMixin):
         try:
             td = table(**data)
             with self.db_session() as db:
-                await as_future(db.add, (td))
-                await db.flush()
+                await as_future(db.add(td))
+                await as_future(db.flush())
                 td = td.to_object()
         except Exception as e:
             app_log.error(e)
@@ -96,10 +96,10 @@ class BaseModel(SessionMixin):
         finally:
             return td
 
-    async def query_data(self, table:DeclarativeMeta, filter:list, page=1, page_size=10):
+    async def query_data(self, table:DeclarativeMeta, filter:tuple, page=1, page_size=10):
         try:
             with self.db_session() as db:
-                td = await as_future(db.query(table).filter(*filter).order_by(table.id.desc()).paginate, (page, page_size))
+                td = await as_future(db.query(table).filter(*filter).order_by(table.id.desc()).paginate(page, page_size))
                 td.items = [d.to_object() for d in td.items]
         except Exception as e:
             app_log.error(e)
@@ -107,10 +107,10 @@ class BaseModel(SessionMixin):
         finally:
             return td
 
-    async def query_one_data(self, table:DeclarativeMeta, filter:list):
+    async def query_one_data(self, table:DeclarativeMeta, filter:tuple):
         try:
             with self.db_session() as db:
-                td = await as_future(db.query(table).filter(*filter).first)
+                td = await as_future(db.query(table).filter(*filter).first())
                 td = td and td.to_object()
         except Exception as e:
             app_log.error(e)
@@ -118,22 +118,22 @@ class BaseModel(SessionMixin):
         finally:
             return td
 
-    async def update_data(self, table:DeclarativeMeta, filter:list, data:dict):
+    async def update_data(self, table:DeclarativeMeta, filter:tuple, data:dict):
         try:
             with self.db_session() as db:
-                td = await as_future(db.query(table).filter(*filter).with_for_update().update, (data, 'fetch'))
-                await db.flush()
+                td = await as_future(db.query(table).filter(*filter).with_for_update().update(data, synchronize_session='fetch'))
+                await as_future(db.flush())
         except Exception as e:
             app_log.error(e)
             td = False
         finally:
             return td
 
-    async def delete_data(self, table:DeclarativeMeta, filter:list):
+    async def delete_data(self, table:DeclarativeMeta, filter:tuple):
         try:
             with self.db_session() as db:
-              td = await as_future(db.query(table).filter(*filter).delete, ('fetch'))
-              await db.flush()
+              td = await as_future(db.query(table).filter(*filter).delete(synchronize_session='fetch'))
+              await as_future(db.flush())
         except Exception as e:
             app_log.error(e)
             td = False
