@@ -45,7 +45,7 @@ class RedisMixin:
         return self._redis_session
 
     def _make_redis_session(self) -> redis.Redis:
-        if not self.application and self.config:
+        if not self.application and not self.config:
             raise MissingFactoryError()
         
         if self.application:

@@ -33,6 +33,7 @@ class SessionMixin:
             raise
         else:
             session.commit()
+            session.flush()
         finally:
             if session:
                 session.close()
@@ -148,49 +149,156 @@ def to_object(self):
 
 @classmethod
 async def query_one_by_filter(cls, *filter):
-    return (await as_future(
-        cls.db.query(cls).filter(*filter).first()
-    ))
+    try:
+        res = await as_future(
+            cls.db.query(cls).filter(*filter).first()
+        )
+    except Exception:
+        res = False
+        raise
+    finally:
+        if cls.db:
+            await as_future(cls.db.close())
+        return res
+    
 
 @classmethod
 async def query_all(cls):
-    return (await as_future(
-        cls.db.query(cls).order_by(cls.id.desc()).all()
-    ))
+    try:
+        res = await as_future(
+            cls.db.query(cls).order_by(cls.id.desc()).all()
+        )
+    except Exception:
+        res = False
+        raise
+    finally:
+        if cls.db:
+            await as_future(cls.db.close())
+        return res
+    
 
 @classmethod
-async def query_by_page(cls, page=1, per_page=10):
-    return (await as_future(
-        cls.db.query(cls).order_by(cls.id.desc()).paginate(page, per_page)
-    ))
+async def query_by_page(cls, page:int=1, per_page:int=10):
+    try:
+        res = await as_future(
+            cls.db.query(cls).order_by(cls.id.desc()).paginate(page, per_page)
+        )
+    except Exception:
+        res = False
+        raise
+    finally:
+        if cls.db:
+            await as_future(cls.db.close())
+        return res
+    
 
 @classmethod
 async def query_by_filter(cls, *filter):
-    return (await as_future(
-        cls.db.query(cls).filter(*filter).order_by(cls.id.desc()).all()
-    ))
+    try:
+        res = await as_future(
+            cls.db.query(cls).filter(*filter).order_by(cls.id.desc()).all()
+        )
+    except Exception:
+        res = False
+        raise
+    finally:
+        if cls.db:
+            await as_future(cls.db.close())
+        return res
+    
 
 @classmethod
-async def query_by_filter_and_page(cls, page=1, per_page=10, *filter):
-    return (await as_future(
-        cls.db.query(cls).filter(*filter).order_by(cls.id.desc()).paginate(page, per_page)
-    ))
+async def query_by_filter_and_page(cls, *filter, page:int=1, per_page:int=10):
+    try:
+        res = await as_future(
+            cls.db.query(cls).filter(*filter).order_by(cls.id.desc()).paginate(page, per_page)
+        )
+    except Exception:
+        res = False
+        raise
+    finally:
+        if cls.db:
+            await as_future(cls.db.close())
+        return res
 
 @classmethod
-async def update_by_filter(cls, data, *filter):
-    res = await as_future(
-        cls.db.query(cls).filter(*filter).with_for_update().update(data, synchronize_session='fetch')
-    )
-    await as_future(cls.db.flush())
-    return res
+async def update_by_filter(cls, *filter, data:dict):
+    try:
+        res = await as_future(
+            cls.db.query(cls).filter(*filter).with_for_update().update(data, synchronize_session='fetch')
+        )
+    except Exception:
+        if cls.db:
+            await as_future(cls.db.rollback())
+        res = False
+        raise
+    else:
+        await as_future(cls.db.commit())
+        await as_future(cls.db.flush())
+    finally:
+        if cls.db:
+            await as_future(cls.db.close())
+        return res
+    
 
 @classmethod
 async def delete_by_filter(cls, *filter):
-    res = await as_future(
-        cls.db.query(cls).filter(*filter).delete(synchronize_session='fetch')
-    )
-    await as_future(cls.db.flush())
-    return res
+    try:
+        res = await as_future(
+            cls.db.query(cls).filter(*filter).delete(synchronize_session='fetch')
+        )
+    except Exception:
+        if cls.db:
+            await as_future(cls.db.rollback())
+        res = False
+        raise
+    else:
+        await as_future(cls.db.commit())
+        await as_future(cls.db.flush())
+    finally:
+        if cls.db:
+            await as_future(cls.db.close())
+        return res
+
+@classmethod
+async def add_all_data(cls, data:list):
+    try:
+        await as_future(
+            cls.db.add_all(data)
+        )
+    except Exception:
+        if cls.db:
+            await as_future(cls.db.rollback())
+        res = False
+        raise
+    else:
+        await as_future(cls.db.commit())
+        await as_future(cls.db.flush())
+        res = True
+    finally:
+        if cls.db:
+            await as_future(cls.db.close())
+        return res
+
+@classmethod
+async def add_one_data(cls, data:DeclarativeMeta):
+    try:
+        await as_future(
+            cls.db.add(data)
+        )
+    except Exception:
+        if cls.db:
+            await as_future(cls.db.rollback())
+        res = False
+        raise
+    else:
+        await as_future(cls.db.commit())
+        await as_future(cls.db.flush())
+        res = True
+    finally:
+        if cls.db:
+            await as_future(cls.db.close())
+        return res
 
 
 class SQLAlchemy:
@@ -208,6 +316,8 @@ class SQLAlchemy:
         self.Model.query_by_filter_and_page = query_by_filter_and_page
         self.Model.update_by_filter = update_by_filter
         self.Model.delete_by_filter = delete_by_filter
+        self.Model.add_all_data = add_all_data
+        self.Model.add_one_data = add_one_data
         self._engines = {}
 
         self.configure(
