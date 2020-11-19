@@ -1,6 +1,9 @@
+import multiprocessing
 from math import ceil
 from sqlalchemy.orm import Query
-
+from concurrent.futures import ThreadPoolExecutor
+from tornado.concurrent import run_on_executor
+from tornado_models.common import _AsyncExecution
 
 class Pagination(object):
     """Internal helper class returned by :meth:`BaseQuery.paginate`.  You
@@ -102,6 +105,8 @@ class Pagination(object):
                 yield num
                 last = num
 
+
+@run_on_executor
 def paginate(self, page=None, per_page=None, max_per_page=None, count=True):
         """Returns ``per_page`` items from page ``page``.
         If ``page`` or ``per_page`` are ``None``, they will be retrieved from
@@ -141,4 +146,13 @@ def paginate(self, page=None, per_page=None, max_per_page=None, count=True):
 
         return Pagination(self, page, per_page, total, items)
 
+setattr(Query, 'executor', ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()))
 Query.paginate = paginate
+
+_async_exec = _AsyncExecution()
+
+as_future = _async_exec.as_future
+
+set_max_workers = _async_exec.set_max_workers
+
+__all__ = ('as_future', 'RedisMixin', 'set_max_workers', 'Redis', 'SessionMixin', 'SQLAlchemy')
