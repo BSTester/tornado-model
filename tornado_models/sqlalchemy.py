@@ -159,9 +159,9 @@ async def query_all(cls):
     ))
 
 @classmethod
-async def query_by_page(cls, page=1, page_size=10):
+async def query_by_page(cls, page=1, per_page=10):
     return (await as_future(
-        cls.db.query(cls).order_by(cls.id.desc()).paginate(page, page_size)
+        cls.db.query(cls).order_by(cls.id.desc()).paginate(page, per_page)
     ))
 
 @classmethod
@@ -171,13 +171,13 @@ async def query_by_filter(cls, *filter):
     ))
 
 @classmethod
-async def query_by_filter_and_page(cls, *filter, page=1, page_size=10):
+async def query_by_filter_and_page(cls, page=1, per_page=10, *filter):
     return (await as_future(
-        cls.db.query(cls).filter(*filter).order_by(cls.id.desc()).paginate(page, page_size)
+        cls.db.query(cls).filter(*filter).order_by(cls.id.desc()).paginate(page, per_page)
     ))
 
 @classmethod
-async def update_by_filter(cls, *filter, data):
+async def update_by_filter(cls, data, *filter):
     res = await as_future(
         cls.db.query(cls).filter(*filter).with_for_update().update(data, synchronize_session='fetch')
     )
