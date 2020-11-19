@@ -2,7 +2,7 @@ import json
 from contextlib import contextmanager
 from typing import Iterator, Optional
 from tornado_models import MissingDatabaseSettingError, MissingFactoryError
-
+from tornado_models import as_future
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -146,6 +146,52 @@ def to_json(self):
 def to_object(self):
     return munchify(self.to_dict())
 
+@classmethod
+async def query_one_by_filter(cls, *filter):
+    return (await as_future(
+        cls.db.query(cls).filter(*filter).first()
+    ))
+
+@classmethod
+async def query_all(cls):
+    return (await as_future(
+        cls.db.query(cls).order_by(cls.id.desc()).all()
+    ))
+
+@classmethod
+async def query_by_page(cls, page=1, page_size=10):
+    return (await as_future(
+        cls.db.query(cls).order_by(cls.id.desc()).paginate(page, page_size)
+    ))
+
+@classmethod
+async def query_by_filter(cls, *filter):
+    return (await as_future(
+        cls.db.query(cls).filter(*filter).order_by(cls.id.desc()).all()
+    ))
+
+@classmethod
+async def query_by_filter_and_page(cls, *filter, page=1, page_size=10):
+    return (await as_future(
+        cls.db.query(cls).filter(*filter).order_by(cls.id.desc()).paginate(page, page_size)
+    ))
+
+@classmethod
+async def update_by_filter(cls, *filter, data):
+    res = await as_future(
+        cls.db.query(cls).filter(*filter).with_for_update().update(data, synchronize_session='fetch')
+    )
+    await as_future(cls.db.flush())
+    return res
+
+@classmethod
+async def delete_by_filter(cls, *filter):
+    res = await as_future(
+        cls.db.query(cls).filter(*filter).delete(synchronize_session='fetch')
+    )
+    await as_future(cls.db.flush())
+    return res
+
 
 class SQLAlchemy:
     def __init__(
@@ -155,6 +201,13 @@ class SQLAlchemy:
         self.Model.to_dict = to_dict
         self.Model.to_json = to_json
         self.Model.to_object = to_object
+        self.Model.query_one_by_filter = query_one_by_filter
+        self.Model.query_all = query_all
+        self.Model.query_by_page = query_by_page
+        self.Model.query_by_filter = query_by_filter
+        self.Model.query_by_filter_and_page = query_by_filter_and_page
+        self.Model.update_by_filter = update_by_filter
+        self.Model.delete_by_filter = delete_by_filter
         self._engines = {}
 
         self.configure(
@@ -174,6 +227,7 @@ class SQLAlchemy:
         self.sessionmaker = scoped_session(sessionmaker(
             class_=SessionEx, db=self, **(session_options or {})
         ))
+        self.Model.db = self.sessionmaker()
 
     @property
     def engine(self):
