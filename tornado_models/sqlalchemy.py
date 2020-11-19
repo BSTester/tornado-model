@@ -1,6 +1,8 @@
 import json
 from contextlib import contextmanager
 from typing import Iterator, Optional
+from tornado_models import MissingDatabaseSettingError, MissingFactoryError
+
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -10,7 +12,6 @@ from sqlalchemy.orm.state import InstanceState
 from decimal import Decimal
 from datetime import datetime
 from munch import munchify
-from tornado_models.common import MissingFactoryError, MissingDatabaseSettingError
 
 
 class SessionMixin:

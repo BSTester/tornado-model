@@ -1,9 +1,69 @@
 import multiprocessing
 from math import ceil
 from sqlalchemy.orm import Query
-from concurrent.futures import ThreadPoolExecutor
+from tornado.concurrent import Future, chain_future
+from concurrent.futures import Executor, ThreadPoolExecutor
 from tornado.concurrent import run_on_executor
-from tornado_models.common import _AsyncExecution
+from tornado.ioloop import IOLoop
+from typing import Callable, Optional, Any
+
+class MissingFactoryError(Exception):
+    pass
+
+
+class MissingDatabaseSettingError(Exception):
+    pass
+
+
+class _AsyncExecution:
+    """Tiny wrapper around ThreadPoolExecutor. This class is not meant to be
+    instantiated externally, but internally we just use it as a wrapper around
+    ThreadPoolExecutor so we can control the pool size and make the
+    `as_future` function public.
+    """
+
+    def __init__(self, max_workers: Optional[int] = None):
+        self._max_workers = (
+            max_workers or multiprocessing.cpu_count()
+        )  # type: int
+        self._pool = None  # type: Optional[Executor]
+
+    def set_max_workers(self, count: int):
+        if self._pool:
+            self._pool.shutdown(wait=True)
+
+        self._max_workers = count
+        self._pool = ThreadPoolExecutor(max_workers=self._max_workers)
+
+    def as_future(self, query: Callable, *args: Any, **kwargs: Any) -> Future:
+        # concurrent.futures.Future is not compatible with the "new style"
+        # asyncio Future, and awaiting on such "old-style" futures does not
+        # work.
+        #
+        # tornado includes a `run_in_executor` function to help with this
+        # problem, but it's only included in version 5+. Hence, we copy a
+        # little bit of code here to handle this incompatibility.
+
+        if not self._pool:
+            self._pool = ThreadPoolExecutor(max_workers=self._max_workers)
+
+        old_future = self._pool.submit(query, *args, **kwargs)
+        new_future = Future()  # type: Future
+        
+        IOLoop.current().add_future(
+            old_future, lambda f: chain_future(f, new_future)
+        )
+
+        return new_future
+
+
+_async_exec = _AsyncExecution()
+
+as_future = _async_exec.as_future
+
+max_workers = _async_exec._max_workers
+
+set_max_workers = _async_exec.set_max_workers
 
 class Pagination(object):
     """Internal helper class returned by :meth:`BaseQuery.paginate`.  You
@@ -12,6 +72,7 @@ class Pagination(object):
     as query object in which case the :meth:`prev` and :meth:`next` will
     no longer work.
     """
+    executor = ThreadPoolExecutor(max_workers)
 
     def __init__(self, query, page, per_page, total, items):
         #: the unlimited query object that was used to create this
@@ -35,6 +96,7 @@ class Pagination(object):
             pages = int(ceil(self.total / float(self.per_page)))
         return pages
 
+    @run_on_executor
     def prev(self):
         """Returns a :class:`Pagination` object for the previous page."""
         assert self.query is not None, 'a query object is required ' \
@@ -53,6 +115,7 @@ class Pagination(object):
         """True if a previous page exists"""
         return self.page > 1
 
+    @run_on_executor
     def next(self):
         """Returns a :class:`Pagination` object for the next page."""
         assert self.query is not None, 'a query object is required ' \
@@ -105,7 +168,6 @@ class Pagination(object):
                 yield num
                 last = num
 
-
 @run_on_executor
 def paginate(self, page=None, per_page=None, max_per_page=None, count=True):
         """Returns ``per_page`` items from page ``page``.
@@ -146,13 +208,9 @@ def paginate(self, page=None, per_page=None, max_per_page=None, count=True):
 
         return Pagination(self, page, per_page, total, items)
 
-setattr(Query, 'executor', ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()))
+
+setattr(Query, 'executor', ThreadPoolExecutor(max_workers))
 Query.paginate = paginate
 
-_async_exec = _AsyncExecution()
 
-as_future = _async_exec.as_future
-
-set_max_workers = _async_exec.set_max_workers
-
-__all__ = ('as_future', 'RedisMixin', 'set_max_workers', 'Redis', 'SessionMixin', 'SQLAlchemy')
+__all__ = ('as_future', 'SessionMixin', 'set_max_workers', 'SQLAlchemy', 'RedisMixin', 'Redis')

@@ -3,8 +3,7 @@ from contextlib import contextmanager
 from typing import Iterator, Optional
 from sqlalchemy.sql.base import NO_ARG
 from tornado.web import Application
-from tornado_models.common import MissingDatabaseSettingError, MissingFactoryError
-
+from tornado_models import MissingDatabaseSettingError, MissingFactoryError
 
 class RedisMixin:
     _redis_session = None  # type: Optional[redis.Redis]
@@ -58,7 +57,6 @@ class RedisMixin:
         if not redis:
             raise MissingDatabaseSettingError()
         return redis.session
-
 
 class Redis:
     def __init__(
