@@ -28,6 +28,8 @@ def authenticated_async(f):
 
 
 class BaseRequestHandler(RedisMixin, SessionMixin, RequestHandler):
+    current_user = None
+
     def get(self):
         self.post()
 
@@ -75,7 +77,7 @@ class BaseRequestHandler(RedisMixin, SessionMixin, RequestHandler):
 
     # 获取当前用户信息
     def get_current_user_async(self):
-        pass
+        return self.current_user
 
 
 class BaseDBModel(SessionMixin):
@@ -88,3 +90,146 @@ class BaseRedisModel(RedisMixin):
     def __init__(self, redis:Redis=None):
         self.config = dict(redis=redis)
         super(BaseRedisModel, self).__init__()
+
+    """
+    取值(字符串)
+    """
+    async def get(self, name):
+        with self.redis_session() as redis:
+            try:
+                value = await as_future(redis.get(name=name))
+                value = value.decode('utf8') if isinstance(value, bytes) else value
+                if value: value = json.loads(value)
+            except Exception as e:
+                app_log.error(e)
+                value = None
+            finally:
+                return value
+
+    """
+    设值(字符串)
+    """
+    async def set(self, name, value, ex=None, px=None, nx=False, xx=False):
+        with self.redis_session() as redis:
+            try:
+                value and (await as_future(redis.set(name=name, value=json.dumps(value, ensure_ascii=False), ex=ex, px=px, nx=nx, xx=xx)))
+            except Exception as e:
+                app_log.error(e)
+
+    """
+    删值
+    """
+    async def delete(self, names):
+        with self.redis_session() as redis:
+            try:
+                await as_future(redis.delete(names))
+            except Exception as e:
+                app_log.error(e)
+
+    """
+    取值(键值对)
+    """
+    async def hgetall(self, name):
+        with self.redis_session() as redis:
+            try:
+                data = dict()
+                values = await as_future(redis.hgetall(name))
+                for key, value in values.items():
+                    value = value.decode('utf8') if isinstance(value, bytes) else value
+                    if value: data[key] = json.loads(value)
+            except Exception as e:
+                app_log.error(e)
+                data = dict()
+            finally:
+                return data
+
+    """
+    设值(键值对)
+    """
+    async def hset(self, name, key, value, ex=None):
+        with self.redis_session() as redis:
+            try:
+                value = json.dumps(value, ensure_ascii=False)
+                value and (await as_future(redis.hset(name, key, value)))
+                ex and (await as_future(redis.expire(name, ex)))
+            except Exception as e:
+                app_log.error(e)
+
+    """
+    批量设值(键值对)
+    """
+    async def hmset(self, name, data, ex=None):
+        with self.redis_session() as redis:
+            try:
+                for key, value in data.items():
+                    data[key] = json.dumps(value, ensure_ascii=False)
+                data and (await as_future(redis.hmset(name, data)))
+                ex and (await as_future(redis.expire(name, ex)))
+            except Exception as e:
+                app_log.error(e)
+
+    """
+    取一个值(键值对)
+    """
+    async def hget(self, name, key):
+        with self.redis_session() as redis:
+            try:
+                data = await as_future(redis.hget(name, key))
+                data = data.decode('utf8') if isinstance(data, bytes) else data
+                if data: data = json.loads(data)
+            except Exception as e:
+                data = None
+                app_log.error(e)
+            finally:
+                return data
+
+    """
+    删一个值(键值对)
+    """
+    async def hdel(self, name, key):
+        with self.redis_session() as redis:
+            try:
+                await as_future(redis.hdel(name, key))
+            except Exception as e:
+                app_log.error(e)
+
+    """
+    设值(列表)
+    """
+    async def lpush(self, name, value, ex=None):
+        with self.redis_session() as redis:
+            try:
+                if not isinstance(value, list): value = [value]
+                if value:
+                    for v in value:
+                        await as_future(redis.lpush(name, json.dumps(v, ensure_ascii=False)))
+                ex and (await as_future(redis.expire(name, ex)))
+            except Exception as e:
+                app_log.error(e)
+
+    """
+    取值(列表)
+    """
+    async def lgetall(self, name):
+        with self.redis_session() as redis:
+            try:
+                end = (await as_future(redis.llen(name)))
+                data = (await as_future(redis.lrange(name, 0, end)))
+                for v in data:
+                    if v: v = json.loads(v)
+            except Exception as e:
+                app_log.error(e)
+                data = []
+            finally:
+                return data
+
+    """
+    清空并设值(列表)
+    """
+    async def lnpush(self, name, value, ex=None):
+        with self.redis_session() as redis:
+            try:
+                await as_future(redis.delete(name))
+                await self.lpush(name=name, value=value, ex=ex)
+            except Exception as e:
+                app_log.error(e)
