@@ -136,7 +136,7 @@ def to_dict(self):
             v = v.strftime('%Y-%m-%d %H:%M:%S')
         elif isinstance(v, Decimal):
             v = str(v.quantize(Decimal('0.00')))
-        elif isinstance(v, DeclarativeMeta):
+        elif hasattr(v, '__tablename__'):
             v = v.to_dict()
         rows[k] = v
     return rows
