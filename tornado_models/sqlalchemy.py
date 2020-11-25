@@ -33,7 +33,6 @@ class SessionMixin:
             raise
         else:
             session.commit()
-            session.flush()
         finally:
             if session:
                 session.close()
