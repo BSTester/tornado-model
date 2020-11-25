@@ -5,7 +5,7 @@ from tornado_models import MissingDatabaseSettingError, MissingFactoryError
 from tornado_models import as_future
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import Session
 from tornado.web import Application
 from sqlalchemy.orm.state import InstanceState
@@ -334,9 +334,9 @@ class SQLAlchemy:
         self.binds = binds or {}
         self._engine_options = engine_options or {}
 
-        self.sessionmaker = scoped_session(sessionmaker(
+        self.sessionmaker = sessionmaker(
             class_=SessionEx, db=self, **(session_options or {})
-        ))
+        )
         self.Model.db = self.sessionmaker()
 
     @property
