@@ -57,7 +57,7 @@ class BaseRequestHandler(RedisMixin, SessionMixin, RequestHandler):
         params = self.request.body
         if isinstance(params, bytes): params = params.decode('utf8')
         try:
-            params = json.loads(params, encoding='utf8')
+            params = json.loads(params)
             params = isinstance(params, dict) and munchify(params) or {}
         except Exception as e:
             app_log.error(e)

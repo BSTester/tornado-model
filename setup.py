@@ -26,7 +26,7 @@ long_description = (here / 'README.md').read_text(encoding='utf-8')
 
 setup(
     name='tornado_models',
-    version='0.0.9',
+    version='0.1.0',
     url='https://github.com/BSTester/tornado-models',
     author='贝克街的捉虫师',
     author_email='forpeng@foxmail.com',
