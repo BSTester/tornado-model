@@ -18,10 +18,10 @@ def authenticated_async(f):
         self.current_user = await self.get_current_user_async()
         if self.current_user is None:
             self.set_status(401, '登录超时')
-            self.write_json(dict(code=401, status='FAIL', message='登录超时, 请重新登录', data=''))
+            self.write_json(dict(errorCode=401, errorMessage='登录超时, 请重新登录', showType=4, data=''))
         elif self.current_user is False:
             self.set_status(403, '禁止访问')
-            self.write_json(dict(code=403, status='FAIL', message='Forbidden', data=''))
+            self.write_json(dict(errorCode=403, errorMessage='Forbidden', showType=9, data=''))
         else:
             await f(self, *args, **kwargs)
     return wrapper
@@ -38,7 +38,7 @@ class BaseRequestHandler(RedisMixin, SessionMixin, RequestHandler):
 
     def forbidden(self):
         self.set_status(403, '禁止访问')
-        ret_data = dict(code=403, status='FAIL', message='Forbidden', data='')
+        ret_data = dict(errorCode=403, errorMessage='Forbidden', showType=9, data='')
         self.write_json(data=ret_data)
 
     # 返回json格式字符串
