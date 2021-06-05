@@ -27,8 +27,13 @@ def authenticated_async(f):
     return wrapper
 
 
-class BaseRequestHandler(RedisMixin, SessionMixin, RequestHandler):
+class BaseRequestHandler(RequestHandler, SessionMixin, RedisMixin):
     current_user = None
+
+    def initialize(self):
+        SessionMixin.settings = self.settings
+        RedisMixin.settings = self.settings
+        super().initialize()
 
     def get(self):
         self.post()
@@ -81,15 +86,12 @@ class BaseRequestHandler(RedisMixin, SessionMixin, RequestHandler):
 
 
 class BaseDBModel(SessionMixin):
-    def __init__(self, db:SQLAlchemy=None):
-        self.config = dict(db=db)
-        super(BaseDBModel, self).__init__()
-
+    def __init__(self, db_sess:SQLAlchemy=None):
+        if db_sess is not None: self.settings['db'] = db_sess
 
 class BaseRedisModel(RedisMixin):
-    def __init__(self, redis:Redis=None):
-        self.config = dict(redis=redis)
-        super(BaseRedisModel, self).__init__()
+    def __init__(self, redis_sess:Redis=None):
+        if redis_sess is not None: self.settings['redis'] = redis_sess
 
     """
     取值(字符串)

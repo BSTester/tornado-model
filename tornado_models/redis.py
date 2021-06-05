@@ -2,13 +2,12 @@ import redis
 from contextlib import contextmanager
 from typing import Iterator, Optional
 from sqlalchemy.sql.base import NO_ARG
-from tornado.web import Application
+from tornado.log import app_log
 from tornado_models import MissingDatabaseSettingError, MissingFactoryError
 
 class RedisMixin:
     _redis_session = None  # type: Optional[redis.Redis]
-    application = None  # type: Optional[Application]
-    config = None
+    settings = {}
 
     @contextmanager
     def redis_session(self) -> Iterator[redis.Redis]:
@@ -45,15 +44,9 @@ class RedisMixin:
         return self._redis_session
 
     def _make_redis_session(self) -> redis.Redis:
-        if not self.application and not self.config:
+        if not self.settings:
             raise MissingFactoryError()
-        
-        if self.application:
-            redis = self.application.settings.get('redis')
-        elif self.config:
-            redis = self.config.get('redis')
-        else:
-            redis = None
+        redis = self.settings.get('redis')
         if not redis:
             raise MissingDatabaseSettingError()
         return redis.session

@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import Session
-from tornado.web import Application
+from tornado.log import app_log
 from sqlalchemy.orm.state import InstanceState
 from decimal import Decimal
 from datetime import datetime
@@ -16,8 +16,7 @@ from munch import munchify
 
 class SessionMixin:
     _session = None  # type: Optional[Session]
-    application = None  # type: Optional[Application]
-    config = None
+    settings = {}
 
     @contextmanager
     def db_session(self) -> Iterator[Session]:
@@ -59,14 +58,9 @@ class SessionMixin:
         return self._session
 
     def _make_session(self) -> Session:
-        if not self.application and not self.config:
+        if not self.settings:
             raise MissingFactoryError()
-        if self.application:
-            db = self.application.settings.get('db')
-        elif self.config:
-            db = self.config.get('db')
-        else:
-            db = None
+        db = self.settings.get('db')
         if not db:
             raise MissingDatabaseSettingError()
         return db.sessionmaker()
@@ -224,7 +218,7 @@ async def query_by_filter_and_page(cls, *filter, page:int=1, per_page:int=10):
 async def update_by_filter(cls, *filter, data:dict):
     try:
         res = await as_future(
-            cls.db.query(cls).filter(*filter).with_for_update().update(data, synchronize_session='fetch')
+            cls.db.query(cls).filter(*filter).with_for_update().update(data, synchronize_session=False)
         )
     except Exception:
         if cls.db:
@@ -244,7 +238,7 @@ async def update_by_filter(cls, *filter, data:dict):
 async def delete_by_filter(cls, *filter):
     try:
         res = await as_future(
-            cls.db.query(cls).filter(*filter).delete(synchronize_session='fetch')
+            cls.db.query(cls).filter(*filter).delete(synchronize_session=False)
         )
     except Exception:
         if cls.db:
