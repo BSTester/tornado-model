@@ -131,6 +131,14 @@ def to_dict(self):
             v = str(v.quantize(Decimal('0.00')))
         elif hasattr(v, '__tablename__'):
             v = v.to_dict()
+        elif isinstance(v, list):
+            y = []
+            for x in v:
+                if hasattr(x, '__tablename__'):
+                    y.append(x.to_dict())
+                else:
+                    y.append(x)
+            v = y        
         rows[k] = v
     return rows
 
